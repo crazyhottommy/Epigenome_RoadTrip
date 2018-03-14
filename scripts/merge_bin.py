@@ -6,7 +6,7 @@ merge consecutive bins together if the states across samples
 are the same. It does not matter how many samples (columns after chr, start, end)
 you have.
 
-python merge_bin.py segments.txt
+python merge_bin.py --infile input.txt --ofile output.txt
 
 chr1    0   200 E1  E2  E2  E3
 chr1    200 400 E1  E2  E2  E3

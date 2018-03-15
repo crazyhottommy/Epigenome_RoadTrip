@@ -18,7 +18,7 @@ meta_data<- read.table("data/epigenome_Roadmap/ids_with_rnaseq.tsv", stringsAsFa
 ## need to figure out a better way to select the columns...
 new_data<- seg_df_sub %>% distinct(E027, E028, E055, E056, E057, E058, E059, E061, E065, E075, E077, E079, E083, E084, E085, E092, E094, E095, E101, E102, E104, E105, E106, E109, E110, .keep_all = T)
  
-x_data<- as.matrix(new_data[-c(1:3,ncol(new_data))])
+x_data<- as.matrix(new_data[-c(1:3)])
 
 rownames(x_data)<- paste(new_data$chr, new_data$start, new_data$end, sep = ":")
 
@@ -41,7 +41,7 @@ write_tsv(sub_meta[, c(1,2)] %>% mutate(sample = paste0(sample, ".bed.bgz")), "d
 sample_ids = subset(meta_data, X2 %in% c("Heart", "Digestive", "Epithelial"))$X1
  
 set.seed(1973)
-cols2use = sample(1:ncol(x_data), 200)
+cols2use = sample(1:ncol(x_data), 500)
 
 data<- cbind(x_data, tissue = resp_data$X2)
 
@@ -80,7 +80,7 @@ library(VSURF)
 test_data<- x_data[,cols2use]
 
 ti<- proc.time()
-vsurf <- VSURF(x = x_data[,cols2use], y = resp_data$X2, ntree = 500, parallel =F)
+vsurf <- VSURF(x = test_data, y = resp_data$X2, ntree = 500, parallel =T, ncores = 4)
 proc.time() - ti
 
 names(vsurf)
@@ -93,5 +93,79 @@ vsurf$varselect.pred
 
 ```
 
+### Heatmap
+
+```{r}
+library(stringr)
+library(ComplexHeatmap)
+colnames(test_data)[vsurf$varselect.interp]
+
+rf_mat<- test_data[vsurf$varselect.interp]
+#rf_mat<- test_data[vsurf$varselect.thres]
+
+sub_meta
+
+# reorder the mat according to the meta data
+
+rf_mat<- rf_mat[sub_meta$sample, ]
+Heatmap(t(rf_mat), show_row_names = F)
+
+## one can change it to numeric and cluster with eucledian distance
+rf_numeric_mat<- as.data.frame(rf_mat) %>% 
+        mutate_all(str_replace, "E", "") %>% 
+        mutate_all(as.numeric) %>%
+        as.matrix()
+
+rownames(rf_numeric_mat)<- rownames(rf_mat)
+
+
+cell_fun = function(j, i, x, y, width, height, fill) {
+	grid.rect(x = x, y = y, width = width *0.98, height = height *0.98, 
+		gp = gpar(col = "grey", fill = fill, lty = 1, lwd = 0.5))
+}
+
+## get colors http://wiki.wubrowse.org/QuantitativeCategorySeries
+col_fun<- circlize::colorRamp2(1:15, c('#ff0000', '#ff4500', '#32cd32','#008000','#006400',
+                                       '#c2e105', '#ffff00', '#66cdaa', '#8a91d0', '#cd5c5c',
+                                       '#e9967a', '#bdb76b', '#808080', '#c0c0c0', '#ffffff'))
+
+df<- sub_meta[,2, drop =F]
+rownames(df)<- sub_meta$sample
+
+ha<-  HeatmapAnnotation(df = df, col = list(tissue = c("Epithelial" =  "red", "Heart" = "blue",
+                                                       "Digestive" = "green")))
+
+Heatmap(t(rf_numeric_mat), show_row_names = F, 
+        rect_gp = gpar(type = "none"),
+        cell_fun = cell_fun, col = col_fun,
+        cluster_columns = F,
+        heatmap_legend_param = list(color_bar = "discrete", at = 1:15, 
+                                    labels = c('Active TSS', 'Flanking Active TSS', 
+                                               'Transcr at gene 5\' and 3\'', 'Strong transcription',
+                                               'Weak transcription', 'Genic enhancers',
+                                               'Enhancers', 'ZNF genes & repeats',
+                                               'Heterochromatin', 'Bivalent/Poised TSS',
+                                               'Flanking Bivalent TSS/Enh','Bivalent Enhancer',
+                                               'Repressed PolyComb', 'Weak Repressed PolyComb',
+                                               'Quiescent/Low')),
+        name = "chromatin state",
+        top_annotation = ha)
+
+## no lines between grid 
+Heatmap(t(rf_numeric_mat), show_row_names = F, 
+        cluster_columns = T,
+        col = col_fun,
+        heatmap_legend_param = list(color_bar = "discrete", at = 1:15, 
+                                    labels = c('Active TSS', 'Flanking Active TSS', 
+                                               'Transcr at gene 5\' and 3\'', 'Strong transcription',
+                                               'Weak transcription', 'Genic enhancers',
+                                               'Enhancers', 'ZNF genes & repeats',
+                                               'Heterochromatin', 'Bivalent/Poised TSS',
+                                               'Flanking Bivalent TSS/Enh','Bivalent Enhancer',
+                                               'Repressed PolyComb', 'Weak Repressed PolyComb',
+                                               'Quiescent/Low')),
+        name = "chromatin state",
+        top_annotation = ha)
+```
 
 

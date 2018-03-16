@@ -41,19 +41,10 @@ write_tsv(sub_meta[, c(1,2)] %>% mutate(sample = paste0(sample, ".bed.bgz")), "d
 sample_ids = subset(meta_data, X2 %in% c("Heart", "Digestive", "Epithelial"))$X1
  
 set.seed(1973)
-cols2use = sample(1:ncol(x_data), 500)
+cols2use = sample(1:ncol(x_data), 2500)
 
 data<- cbind(x_data, tissue = resp_data$X2)
 
-## caret package https://machinelearningmastery.com/feature-selection-with-the-caret-r-package/
-
-
-## create dummy variables, caret assumes the predictors to be numeric. takes forever...
-dummies <- dummyVars( tissue ~ .,  data = data)
-head(predict(dummies, newdata = etitanic))
-
-
-control <- rfeControl(functions=rfFuncs, method="cv", number=10)
 # run the RFE algorithm
 results <- rfe(x_data, resp_data$X2, sizes=c(1:8), rfeControl=control)
 # summarize the results
@@ -80,7 +71,9 @@ library(VSURF)
 test_data<- x_data[,cols2use]
 
 ti<- proc.time()
-vsurf <- VSURF(x = test_data, y = resp_data$X2, ntree = 500, parallel =T, ncores = 4)
+
+# sqrt(p) is the default of mtry 
+vsurf <- VSURF(x = test_data, y = resp_data$X2, ntree = 500, parallel =T, ncores = 4, mtry = 50)
 proc.time() - ti
 
 names(vsurf)
@@ -135,10 +128,10 @@ rownames(df)<- sub_meta$sample
 ha<-  HeatmapAnnotation(df = df, col = list(tissue = c("Epithelial" =  "red", "Heart" = "blue",
                                                        "Digestive" = "green")))
 
-Heatmap(t(rf_numeric_mat), show_row_names = F, 
+Heatmap(t(rf_numeric_mat), show_row_names = T, 
         rect_gp = gpar(type = "none"),
         cell_fun = cell_fun, col = col_fun,
-        cluster_columns = F,
+        cluster_columns = T,
         heatmap_legend_param = list(color_bar = "discrete", at = 1:15, 
                                     labels = c('Active TSS', 'Flanking Active TSS', 
                                                'Transcr at gene 5\' and 3\'', 'Strong transcription',

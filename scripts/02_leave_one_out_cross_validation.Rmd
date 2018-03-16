@@ -1,0 +1,92 @@
+---
+title: "02_leave_one_out_cv"
+author: "Ming Tang"
+date: "March 16, 2018"
+output: html_document
+---
+
+```{r}
+library(VSURF)
+
+set.seed(1973)
+cols2use = sample(1:ncol(x_data), 2500)
+test_data<- x_data[,cols2use]
+
+ti<- proc.time()
+
+# sqrt(p) is the default of mtry 
+vsurf <- VSURF(x = test_data, y = resp_data$X2, ntree = 500, parallel =T, ncores = 4, mtry = 50)
+proc.time() - ti
+
+names(vsurf)
+summary(vsurf)
+
+plot(vsurf)
+vsurf$varselect.thres
+vsurf$varselect.interp
+vsurf$varselect.pred
+```
+
+### use caret for cross-validation
+
+```{r}
+library(caret)
+
+# caret package https://machinelearningmastery.com/feature-selection-with-the-caret-r-package/
+## create dummy variables, caret assumes the predictors to be numeric. takes forever...
+
+## now subset the X matrix with only the variables 
+features_sel<- vsurf$varselect.interp
+
+cv_data<- cbind(test_data[,features_sel], tissue = factor(resp_data$X2))
+dummies <- dummyVars(tissue ~ .,  data = cv_data)
+head(predict(dummies, newdata = cv_data))
+
+new_x<- predict(dummies, newdata = cv_data)
+## ?rfeControl or the ?trainControl 
+control <- rfeControl(functions=rfFuncs, method="LOOCV")
+
+fitControl<- trainControl(method = "LOOCV", classProbs = TRUE)
+
+set.seed(825)
+
+## not working
+rfFit <- train(x = new_x, y=cv_data$tissue, 
+                 method = "rf", 
+                 trControl = fitControl, 
+                 verbose = TRUE)
+
+```
+
+### just use randomForest package
+
+`caret` is not happy with categorical predictors...
+
+```{r}
+library(randomForest)
+cv_data
+rf_mod<- randomForest(tissue ~ ., data = cv_data[-1,])
+predict(rf_mod, new_data = cv_data[1,-ncol(cv_data)], type = "response")
+getTree(rf_mod)
+
+
+### leave one out cross-validation
+
+predicts<- list()
+for (i in 1:nrow(cv_data)){
+        data<- cv_data[-i, ]
+        # the last column is the response
+        new_data<- cv_data[i, -ncol(cv_data)]
+        rf_mod<- randomForest(tissue ~ ., data = data )
+        rf_predict<- predict(rf_mod, newdata = new_data, type = "response")
+        predicts<- c(predicts, list(data.frame(predict = rf_predict)))
+}
+
+
+cbind(purrr::reduce(predicts, rbind), cv_data$tissue)
+```
+
+
+
+
+

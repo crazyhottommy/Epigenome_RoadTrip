@@ -1,0 +1,161 @@
+---
+title: "03_RNA_expression_categorize"
+author: "Ming Tang"
+date: "March 19, 2018"
+output: html_document
+---
+
+### subset the raw counts of the RNAseq data 
+
+```{r}
+library(tidyverse)
+library(here)
+
+sub_meta<- read_tsv(here("data/epigenome_Roadmap/sample_with_rnaseq.txt"), col_names = T)
+
+head(sub_meta)
+
+rna_seq<- read_tsv(here("data/epigenome_Roadmap/rnaseq/57epigenomes.counts.tsv"), col_names =T)
+
+```
+
+
+```{r}
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("EnsDb.Hsapiens.v75")  # this is still hg19, GRCh37. v86 is GRCh38. 
+# make sure you use the right genome!!!
+
+#create a tx2gene.txt table
+library(EnsDb.Hsapiens.v75)
+edb <- EnsDb.Hsapiens.v75
+
+genes_ensemble <- genes(edb)
+
+gene_length<- as.data.frame(genes_ensemble) %>% dplyr::select(gene_id, gene_name, width)
+
+gene_length_in_df<- left_join(data.frame(gene_id = rna_seq$gene_id), gene_length) %>% filter(!is.na(width))
+
+rna_seq_sub<- rna_seq %>% filter(gene_id %in% gene_length_in_df$gene_id)
+## now, just use gene_length instead of effective length. effective length = gene length - fragment_length
+
+all.equal(rna_seq_sub$gene_id, gene_length_in_df$gene_id)
+
+countToTpm <- function(counts, effLen)
+{
+    rate <- log(counts + 1) - log(effLen)
+    denom <- log(sum(exp(rate)))
+    exp(rate - denom + log(1e6))
+}
+
+
+### quantile normalization?
+
+rna_mat<- as.matrix(rna_seq_sub[, -1])
+rownames(rna_mat)<- rna_seq_sub$gene_id
+
+### There are many 0s in the matrix 
+### get rid of 0s for calculating the median for each sample. 
+
+remove_zero_counts_get_TPM_median<- function(x){
+        ind<- x !=0
+        x[ind] %>% countToTpm(effLen =  gene_length_in_df$width[ind]) %>% median()
+}
+
+remove_zero_counts_get_TPM_median(rna_mat[,1])
+
+apply(rna_mat, 2, remove_zero_counts_get_TPM_median)
+
+rna_TPM<- apply(rna_mat, 2, countToTpm, effLen = gene_length_in_df$width )
+
+## before normalization
+boxplot(log2(rna_TPM), las = 2)
+
+library(preprocessCore)
+
+#do a upper-quantile normalization
+rna_TPM_norm <- normalize.quantiles(rna_TPM)
+rownames(rna_TPM_norm)<- rownames(rna_TPM)
+colnames(rna_TPM_norm)<- colnames(rna_TPM)
+boxplot(log2(rna_TPM_norm), las = 2)
+
+## now all sampels have the same median of 4.027
+apply(rna_TPM_norm, 2, median)
+
+rna_TPM_categorized<- ifelse(rna_TPM_norm >=4.027441, "High", "Low")
+rownames(rna_TPM_categorized)<- rownames(rna_TPM)
+colnames(rna_TPM_categorized)<- colnames(rna_TPM)
+
+rownames(rna_TPM_norm )<- rownames(rna_TPM)
+colnames(rna_TPM_norm )<- colnames(rna_TPM)
+
+
+TPM_df<- as.data.frame(rna_TPM_categorized) %>% rownames_to_column("gene_id") %>%
+        left_join(gene_length)
+
+TPM_numeric<- as.data.frame(rna_TPM_norm)  %>% rownames_to_column("gene_id") %>%
+        left_join(gene_length)
+
+View(TPM_df)
+View(TPM_numeric)
+```
+
+### subset the samples we have 
+
+```{r}
+TPM_df_sub<- TPM_df %>% dplyr::select(one_of(sub_meta$sample),gene_id, gene_name)
+sub_meta
+
+## remove genes with only Low or only High across samples.
+
+TPM_only<- dplyr::select(TPM_df_sub, -gene_id, -gene_name)
+
+
+## test if every column has the same string for every row
+
+apply(TPM_only, 1, function(x) length(unique(x)) == 1) %>% table()
+
+## require at least 4 Low and 4 High in every row
+
+filter_row<- function(x){
+        High_num <- sum(x== "High")
+        Low_num <- sum( x == "Low")
+        return(High_num >=4 & Low_num>=4)
+}
+
+ind<- apply(TPM_only, 1, filter_row)
+
+## only 4505 genes left.
+TPM_df_sub<- TPM_df_sub[ind, ]
+
+
+write_tsv(TPM_df_sub, "data/epigenome_Roadmap/rnaseq/response_rnaseq_sub.txt")
+```
+
+
+get the bins within 200 kb upstream and downstream of each gene.
+
+```{r}
+library(EnsDb.Hsapiens.v75)
+library(EnrichedHeatmap)
+library(rtracklayer)
+edb <- EnsDb.Hsapiens.v75
+
+genes_ensemble <- genes(edb)
+
+genes_GR<- genes_ensemble[genes_ensemble$gene_id %in% TPM_df_sub$gene_id]
+
+genes_TSS<- promoters(genes_GR, upstream = 0, downstream = 1)
+
+## change to UCSC chr+
+seqlevelsStyle(genes_TSS)<- "UCSC"
+
+states<- import("E027_15_coreMarks_segments.bed", format = "BED")
+
+## relevel the states 
+states$name = factor(states$name, levels =paste0("E", 1:15))
+
+mat<- normalizeToMatrix(states, genes_TSS, value_column = "name")
+
+mat<- normalizeToMatrix(states, genes_TSS, value_column = "name", extend = 200000, w = 1000)
+
+```

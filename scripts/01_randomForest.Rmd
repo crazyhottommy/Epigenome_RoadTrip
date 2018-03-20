@@ -128,7 +128,7 @@ rownames(df)<- sub_meta$sample
 ha<-  HeatmapAnnotation(df = df, col = list(tissue = c("Epithelial" =  "red", "Heart" = "blue",
                                                        "Digestive" = "green")))
 
-Heatmap(t(rf_numeric_mat), show_row_names = T, 
+Heatmap(t(rf_numeric_mat), show_row_names = F, 
         rect_gp = gpar(type = "none"),
         cell_fun = cell_fun, col = col_fun,
         cluster_columns = T,

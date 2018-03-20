@@ -66,6 +66,7 @@ rfFit <- train(x = new_x, y=cv_data$tissue,
 library(randomForest)
 cv_data
 rf_mod<- randomForest(tissue ~ ., data = cv_data[-1,])
+rf_mod
 predict(rf_mod, new_data = cv_data[1,-ncol(cv_data)], type = "response")
 getTree(rf_mod)
 

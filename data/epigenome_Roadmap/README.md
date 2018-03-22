@@ -36,7 +36,7 @@ done
 cd /rsrch2/genomic_med/krai/epigenome_roadmap/concept_learning_chromHMM_segs
 cat sample_ids.txt | while read -r id
 do
-  wget -r --no-parent -nH --cut-dir=8 -A ${id}*_dense.bed.gz http://egg2.wustl.edu/roadmap/data/byFileType/chromhmmSegmentations/ChmmModels/coreMarks/jointModel/final/
+  wget -r --no-parent -nH --cut-dir=8 -A ${id}*_dense.bed.bgz* http://egg2.wustl.edu/roadmap/data/byFileType/chromhmmSegmentations/ChmmModels/coreMarks/jointModel/final/
 done
 
 ```

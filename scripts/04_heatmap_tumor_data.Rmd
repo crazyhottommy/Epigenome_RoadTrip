@@ -77,16 +77,17 @@ df<- as.data.frame(tumor_meta)[,2, drop =F]
 rownames(df)<- tumor_meta$sample
 
 ha<-  HeatmapAnnotation(df = df, col = list(subtype = c("NRAS" =  "red", "BRAF" = "blue",
-                                                       "Triple_WT" = "green")))
+                                                       "Triple_WT" = "green")),
+                        gp = gpar(col = "black"))
 library(genefilter)
 rv<- rowVars(rf_numeric_mat)
 ## select the top n most variable genes for clustering
 idx<- order(-rv)[1:200]
  
 idx<- apply(rf_numeric_mat, 1, function(x) sum(x==14)) >=5
+idx<- apply(rf_numeric_mat, 1, function(x) sum(x==1)) >= 3
 
-
-Heatmap(rf_numeric_mat[-idx,], show_row_names = F,
+Heatmap(rf_numeric_mat[idx,], show_row_names = F,
         col = col_fun,
         cluster_columns = T,
         row_dend_reorder = T,
